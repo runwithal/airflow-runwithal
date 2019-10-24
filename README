@@ -1,0 +1,5 @@
+`docker build . -t airflow-runwithal`
+
+`docker tag airflow-runwithal allanw1/airflow-runwithal:[tagname]`
+
+`docker push allanw1/airflow-runwithal:[tagname]`

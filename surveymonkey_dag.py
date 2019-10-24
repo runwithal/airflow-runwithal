@@ -1,4 +1,5 @@
 from airflow import DAG
+import airflow
 from datetime import datetime, timedelta
 from airflow.contrib.operators.kubernetes_pod_operator import KubernetesPodOperator
 from airflow.operators.dummy_operator import DummyOperator
@@ -11,7 +12,7 @@ seven_days_ago = datetime.combine(datetime.today() - timedelta(14),
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': seven_days_ago,
+    'start_date': airflow.utils.dates.days_ago(0), 
     'email': ['airflow@example.com'],
     'email_on_failure': False,
     'email_on_retry': False,
@@ -20,39 +21,21 @@ default_args = {
 }
 
 dag = DAG(
-    'surveymonkey_singer', default_args=default_args, schedule_interval=timedelta(minutes=10))
+    'surveymonkey_singer', default_args=default_args, schedule_interval=timedelta(minutes=240), catchup=False)
 
 start = DummyOperator(task_id='run_this_first', dag=dag)
 
-volume_mount = VolumeMount('airflow-dags',
-                            mount_path='/dags',
-                            sub_path='dags',
-                            read_only=True)
-
-volume_config = {
-    'persistentVolumeClaim':
-        {
-            'claimName': 'airflow-dags'
-        }
-}
-
-volume = Volume(name='airflow-dags', configs=volume_config)
-file_path = "/root/kubeconfig/kubeconfig"
-
 #myargs = "tap-surveymonkey -c tap_config_surveymonkey.json -p properties_surveymonkey.json | target-azureblobstorage -c config_surveymonkey.json"
-myargs = "tap-surveymonkey"
+myargs = "tap-surveymonkey -c /configs/tap_config_surveymonkey.json -p /configs/properties_surveymonkey.json -s state.json | target-stitch -c /configs/config-stitch.json > state.json && cat state.json"
 
 passing = KubernetesPodOperator(namespace='default',
-    			  image="registry.hub.docker.com/allanw1/airflow-runwithal:0.1",
-                          cmds=["/bin/bash", "-c"],
+    			  image="registry.hub.docker.com/allanw1/airflow-runwithal:0.3",
+                          cmds=["/bin/bash","-c"],
                           arguments=[myargs],
                           labels={"foo": "bar"},
                           name="surveymonkeysinger",
                           task_id="getsurveys",
-                          volume_mounts=[volume_mount],
-                          volumes=[volume],
                           get_logs=True,
-                          in_cluster=True,
                           dag=dag
                           )
 
